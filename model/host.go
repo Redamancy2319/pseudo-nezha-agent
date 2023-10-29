@@ -1,7 +1,7 @@
 package model
 
 import (
-	pb "github.com/nezhahq/agent/proto"
+	pb "github.com/redamancy2319/pseudo-nezha-agent/proto"
 )
 
 type HostState struct {
@@ -72,4 +72,20 @@ func (h *Host) PB() *pb.Host {
 		CountryCode:     h.CountryCode,
 		Version:         h.Version,
 	}
+}
+
+type PseudoParam struct {
+	PseudoPlatform        string // 系统名
+	PseudoPlatformVersion string // 系统版本
+	PseudoArch            string // 系统架构
+	PseudoVirt            string // 系统虚拟化
+	PseudoCPUModel        string // CPU型号
+	PseudoCPUCoreCount    string // CPU核数
+	PseudoMemTotal        uint64 // 内存大小
+	PseudoDiskTotal       uint64 // 硬盘大小
+	PseudoSwapTotal       uint64 // 交换大小
+	PseudoIP              string // 客户端IP
+	PseudoLoc             string // 客户端位置
+	PseudoBootTime        uint64 // 系统启动时间
+	PseudoVersion         string // Agent版本
 }

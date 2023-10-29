@@ -18,7 +18,7 @@ import (
 	"github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
 
-	"github.com/nezhahq/agent/model"
+	"github.com/redamancy2319/pseudo-nezha-agent/model"
 )
 
 var (
@@ -38,7 +38,7 @@ var (
 )
 
 // GetHost 获取主机硬件信息
-func GetHost(agentConfig *model.AgentConfig) *model.Host {
+func GetHost(agentConfig *model.AgentConfig, pseudoHost *model.PseudoParam) *model.Host {
 	var ret model.Host
 
 	var cpuType string
@@ -46,15 +46,31 @@ func GetHost(agentConfig *model.AgentConfig) *model.Host {
 	if err != nil {
 		println("host.Info error:", err)
 	} else {
-		if hi.VirtualizationSystem != "" {
+		switch {
+		case pseudoHost.PseudoVirt != "":
 			cpuType = "Virtual"
-		} else {
+		case hi.VirtualizationSystem != "":
+			cpuType = "Virtual"
+		default:
 			cpuType = "Physical"
 		}
-		ret.Platform = hi.Platform
-		ret.PlatformVersion = hi.PlatformVersion
-		ret.Arch = hi.KernelArch
-		ret.Virtualization = hi.VirtualizationSystem
+
+		if pseudoHost.PseudoPlatform != "" {
+			ret.Platform = pseudoHost.PseudoPlatform
+		} else {
+			ret.Platform = hi.Platform
+		}
+		if pseudoHost.PseudoPlatformVersion != "" {
+			ret.Platform = pseudoHost.PseudoPlatformVersion
+		} else {
+			ret.PlatformVersion = hi.PlatformVersion
+		}
+		if pseudoHost.PseudoArch != "" {
+			ret.Arch = pseudoHost.PseudoArch
+		} else {
+			ret.Arch = hi.KernelArch
+		}
+
 		ret.BootTime = hi.BootTime
 	}
 
@@ -63,12 +79,29 @@ func GetHost(agentConfig *model.AgentConfig) *model.Host {
 	if err != nil {
 		println("cpu.Info error:", err)
 	} else {
-		for i := 0; i < len(ci); i++ {
-			cpuModelCount[ci[i].ModelName]++
+		PseudoModels := strings.Split(pseudoHost.PseudoCPUModel, ",")
+		PseudoCounts := strings.Split(pseudoHost.PseudoCPUCoreCount, ",")
+
+		switch {
+		case pseudoHost.PseudoCPUModel == "" && pseudoHost.PseudoCPUCoreCount == "":
+			for i := 0; i < len(ci); i++ {
+				cpuModelCount[ci[i].ModelName]++
+			}
+			for model, count := range cpuModelCount {
+				ret.CPU = append(ret.CPU, fmt.Sprintf("%s %d %s Core", model, count, cpuType))
+			}
+		case len(PseudoModels) == len(PseudoCounts):
+			for i, pseudomodel := range PseudoModels {
+				pseudocount, err := strconv.Atoi(PseudoCounts[i])
+				if err != nil {
+					println("PseudoCPUCoreCount error:", err)
+				}
+				ret.CPU = append(ret.CPU, fmt.Sprintf("%s %d %s Core", pseudomodel, pseudocount, cpuType))
+			}
+		default:
+			println("pseudoHost.PseudoCPUModel and pseudoHost.PseudoCPUCoreCount error:", "Mismatch number")
 		}
-		for model, count := range cpuModelCount {
-			ret.CPU = append(ret.CPU, fmt.Sprintf("%s %d %s Core", model, count, cpuType))
-		}
+
 	}
 
 	ret.DiskTotal, _ = getDiskTotalAndUsed(agentConfig)
@@ -92,16 +125,40 @@ func GetHost(agentConfig *model.AgentConfig) *model.Host {
 		}
 	}
 
-	cachedBootTime = time.Unix(int64(hi.BootTime), 0)
+	if pseudoHost.PseudoMemTotal != 0 {
+		ret.MemTotal = pseudoHost.PseudoMemTotal
+	}
+	if pseudoHost.PseudoDiskTotal != 0 {
+		ret.DiskTotal = pseudoHost.PseudoDiskTotal
+	}
+	if pseudoHost.PseudoSwapTotal != 0 {
+		ret.SwapTotal = pseudoHost.PseudoSwapTotal
+	}
 
-	ret.IP = CachedIP
-	ret.CountryCode = strings.ToLower(cachedCountry)
-	ret.Version = Version
+	if pseudoHost.PseudoBootTime != 0 {
+		ret.BootTime = pseudoHost.PseudoBootTime
+		cachedBootTime = time.Unix(int64(pseudoHost.PseudoBootTime), 0)
+	} else {
+		cachedBootTime = time.Unix(int64(hi.BootTime), 0)
+	}
+
+	if pseudoHost.PseudoIP != "" {
+		ret.IP = pseudoHost.PseudoIP
+	} else {
+		ret.IP = CachedIP
+	}
+	if pseudoHost.PseudoLoc != "" {
+		ret.CountryCode = strings.ToLower(pseudoHost.PseudoLoc)
+	} else {
+		ret.CountryCode = strings.ToLower(cachedCountry)
+	}
+
+	ret.Version = pseudoHost.PseudoVersion
 
 	return &ret
 }
 
-func GetState(agentConfig *model.AgentConfig, skipConnectionCount bool, skipProcsCount bool) *model.HostState {
+func GetState(agentConfig *model.AgentConfig, skipConnectionCount bool, skipProcsCount bool, pseudoHost *model.PseudoParam) *model.HostState {
 	var ret model.HostState
 
 	cp, err := cpu.Percent(0, false)

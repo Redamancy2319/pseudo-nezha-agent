@@ -18,12 +18,16 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	bpc "github.com/DaRealFreak/cloudflare-bp-go"
-	"github.com/blang/semver"
 	"github.com/ebi-yade/altsvc-go"
 	"github.com/go-ping/ping"
 	"github.com/gorilla/websocket"
-	"github.com/nezhahq/go-github-selfupdate/selfupdate"
 	"github.com/quic-go/quic-go/http3"
+	"github.com/redamancy2319/pseudo-nezha-agent/model"
+	"github.com/redamancy2319/pseudo-nezha-agent/pkg/monitor"
+	"github.com/redamancy2319/pseudo-nezha-agent/pkg/processgroup"
+	"github.com/redamancy2319/pseudo-nezha-agent/pkg/pty"
+	"github.com/redamancy2319/pseudo-nezha-agent/pkg/util"
+	pb "github.com/redamancy2319/pseudo-nezha-agent/proto"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
 	psnet "github.com/shirou/gopsutil/v3/net"
@@ -31,13 +35,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/nezhahq/agent/model"
-	"github.com/nezhahq/agent/pkg/monitor"
-	"github.com/nezhahq/agent/pkg/processgroup"
-	"github.com/nezhahq/agent/pkg/pty"
-	"github.com/nezhahq/agent/pkg/util"
-	pb "github.com/nezhahq/agent/proto"
 )
 
 type AgentCliParam struct {
@@ -63,6 +60,7 @@ var (
 
 var (
 	agentCliParam AgentCliParam
+	pseudoParam   model.PseudoParam
 	agentConfig   model.AgentConfig
 	httpClient    = &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -164,6 +162,19 @@ func main() {
 	flag.BoolVar(&agentCliParam.DisableForceUpdate, "disable-force-update", false, "禁用强制升级")
 	flag.BoolVar(&agentCliParam.TLS, "tls", false, "启用SSL/TLS加密")
 	flag.BoolVarP(&agentCliParam.Version, "version", "v", false, "查看当前版本号")
+	flag.StringVar(&pseudoParam.PseudoPlatform, "pseudo-platform", "", "修改系统名")
+	flag.StringVar(&pseudoParam.PseudoPlatformVersion, "pseudo-platform-version", "", "修改系统版本")
+	flag.StringVar(&pseudoParam.PseudoArch, "pseudo-arch", "", "修改系统架构")
+	flag.StringVar(&pseudoParam.PseudoVirt, "pseudo-virt", "", "修改系统虚拟化")
+	flag.StringVar(&pseudoParam.PseudoCPUModel, "pseudo-cpu-model", "", "修改CPU型号")
+	flag.StringVar(&pseudoParam.PseudoCPUCoreCount, "pseudo-cpu-core", "", "修改CPU核数")
+	flag.Uint64Var(&pseudoParam.PseudoMemTotal, "pseudo-mem-total", 0, "修改内存大小(Byte)")
+	flag.Uint64Var(&pseudoParam.PseudoDiskTotal, "pseudo-disk-total", 0, "修改硬盘大小(Byte)")
+	flag.Uint64Var(&pseudoParam.PseudoSwapTotal, "pseudo-swap-total", 0, "修改交换大小(Byte)")
+	flag.StringVar(&pseudoParam.PseudoIP, "pseudo-ip", "", "修改上报IP")
+	flag.StringVar(&pseudoParam.PseudoLoc, "pseudo-loc", "", "修改上报位置(ISO 3166-1 alpha-2)")
+	flag.Uint64Var(&pseudoParam.PseudoBootTime, "pseudo-boot-time", 0, "修改启动时间(UnixTimeStamp)")
+	flag.StringVar(&pseudoParam.PseudoVersion, "pseudo-version", "pseudo-nezha-agent", "修改Agent版本")
 	flag.Parse()
 
 	if agentCliParam.Version {
@@ -203,16 +214,6 @@ func run() {
 	// 更新IP信息
 	go monitor.UpdateIP()
 
-	// 定时检查更新
-	if _, err := semver.Parse(version); err == nil && !agentCliParam.DisableAutoUpdate {
-		doSelfUpdate(true)
-		go func() {
-			for range time.Tick(20 * time.Minute) {
-				doSelfUpdate(true)
-			}
-		}()
-	}
-
 	var err error
 	var conn *grpc.ClientConn
 
@@ -245,7 +246,7 @@ func run() {
 		client = pb.NewNezhaServiceClient(conn)
 		// 第一步注册
 		timeOutCtx, cancel = context.WithTimeout(context.Background(), networkTimeOut)
-		_, err = client.ReportSystemInfo(timeOutCtx, monitor.GetHost(&agentConfig).PB())
+		_, err = client.ReportSystemInfo(timeOutCtx, monitor.GetHost(&agentConfig, &pseudoParam).PB())
 		if err != nil {
 			println("上报系统信息失败：", err)
 			cancel()
@@ -255,7 +256,7 @@ func run() {
 		cancel()
 		inited = true
 		// 执行 Task
-		tasks, err := client.RequestTask(context.Background(), monitor.GetHost(&agentConfig).PB())
+		tasks, err := client.RequestTask(context.Background(), monitor.GetHost(&agentConfig, &pseudoParam).PB())
 		if err != nil {
 			println("请求任务失败：", err)
 			retry()
@@ -302,8 +303,6 @@ func doTask(task *pb.Task) {
 		handleTcpPingTask(task, &result)
 	case model.TaskTypeCommand:
 		handleCommandTask(task, &result)
-	case model.TaskTypeUpgrade:
-		handleUpgradeTask(task, &result)
 	case model.TaskTypeKeepalive:
 		return
 	default:
@@ -322,7 +321,7 @@ func reportState() {
 		if client != nil && inited {
 			monitor.TrackNetworkSpeed(&agentConfig)
 			timeOutCtx, cancel := context.WithTimeout(context.Background(), networkTimeOut)
-			_, err = client.ReportSystemState(timeOutCtx, monitor.GetState(&agentConfig, agentCliParam.SkipConnectionCount, agentCliParam.SkipProcsCount).PB())
+			_, err = client.ReportSystemState(timeOutCtx, monitor.GetState(&agentConfig, agentCliParam.SkipConnectionCount, agentCliParam.SkipProcsCount, &pseudoParam).PB())
 			cancel()
 			if err != nil {
 				println("reportState error", err)
@@ -331,36 +330,11 @@ func reportState() {
 			// 每10分钟重新获取一次硬件信息
 			if lastReportHostInfo.Before(time.Now().Add(-10 * time.Minute)) {
 				lastReportHostInfo = time.Now()
-				client.ReportSystemInfo(context.Background(), monitor.GetHost(&agentConfig).PB())
+				client.ReportSystemInfo(context.Background(), monitor.GetHost(&agentConfig, &pseudoParam).PB())
 			}
 		}
 		time.Sleep(time.Second * time.Duration(agentCliParam.ReportDelay))
 	}
-}
-
-// doSelfUpdate 执行更新检查 如果更新成功则会结束进程
-func doSelfUpdate(useLocalVersion bool) {
-	v := semver.MustParse("0.1.0")
-	if useLocalVersion {
-		v = semver.MustParse(version)
-	}
-	println("检查更新：", v)
-	latest, err := selfupdate.UpdateSelf(v, "nezhahq/agent")
-	if err != nil {
-		println("更新失败：", err)
-		return
-	}
-	if !latest.Version.Equals(v) {
-		println("已经更新至：", latest.Version, " 正在结束进程")
-		os.Exit(1)
-	}
-}
-
-func handleUpgradeTask(task *pb.Task, result *pb.TaskResult) {
-	if agentCliParam.DisableForceUpdate {
-		return
-	}
-	doSelfUpdate(false)
 }
 
 func handleTcpPingTask(task *pb.Task, result *pb.TaskResult) {

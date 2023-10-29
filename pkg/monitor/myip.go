@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nezhahq/agent/pkg/util"
+	"github.com/redamancy2319/pseudo-nezha-agent/pkg/util"
 )
 
 const MacOSChromeUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36"
