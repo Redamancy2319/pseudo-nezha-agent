@@ -32,6 +32,9 @@
 <!--GAMFC_DELIMITER--><a href="https://github.com/naiba" title="naiba">
   <img src="https://avatars.githubusercontent.com/u/29243953?v=4" width="50;" alt="naiba"/>
 </a>
+<a href="https://github.com/Redamancy2319" title="Redamancy2319">
+  <img src="https://avatars.githubusercontent.com/u/101871681?v=4" width="50;" alt="Redamancy2319"/>
+</a>
 <a href="https://github.com/zhangnew" title="zhangnew">
   <img src="https://avatars.githubusercontent.com/u/9146834?v=4" width="50;" alt="zhangnew"/>
 </a>
