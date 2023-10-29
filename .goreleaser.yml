@@ -28,7 +28,7 @@ builds:
       - goos: windows
         goarch: arm64
     main: .
-    binary: nezha-agent
+    binary: pseudo-nezha-agent
   - id: darwin-amd64
     env:
       - CGO_ENABLED=1
@@ -41,7 +41,7 @@ builds:
     goarch:
       - amd64
     main: .
-    binary: nezha-agent
+    binary: pseudo-nezha-agent
   - id: darwin-arm64
     env:
       - CGO_ENABLED=1
@@ -54,16 +54,16 @@ builds:
     goarch:
       - arm64
     main: .
-    binary: nezha-agent
+    binary: pseudo-nezha-agent
 universal_binaries:
-  - name_template: "nezha-agent"
+  - name_template: "pseudo-nezha-agent"
     replace: false
 checksum:
   name_template: "checksums.txt"
 snapshot:
-  name_template: "nezha-agent"
+  name_template: "pseudo-nezha-agent"
 archives:
-  - name_template: "nezha-agent_{{ .Os }}_{{ .Arch }}"
+  - name_template: "pseudo-nezha-agent_{{ .Os }}_{{ .Arch }}"
     format: zip
     files:
       - none*
