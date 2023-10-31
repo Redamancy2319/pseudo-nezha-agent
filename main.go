@@ -40,8 +40,6 @@ import (
 type AgentCliParam struct {
 	SkipConnectionCount   bool   // 跳过连接数检查
 	SkipProcsCount        bool   // 跳过进程数量检查
-	DisableAutoUpdate     bool   // 关闭自动更新
-	DisableForceUpdate    bool   // 关闭强制更新
 	DisableCommandExecute bool   // 关闭命令执行
 	Debug                 bool   // debug模式
 	Server                string // 服务器地址
@@ -158,8 +156,6 @@ func main() {
 	flag.BoolVar(&agentCliParam.SkipConnectionCount, "skip-conn", false, "不监控连接数")
 	flag.BoolVar(&agentCliParam.SkipProcsCount, "skip-procs", false, "不监控进程数")
 	flag.BoolVar(&agentCliParam.DisableCommandExecute, "disable-command-execute", false, "禁止在此机器上执行命令")
-	flag.BoolVar(&agentCliParam.DisableAutoUpdate, "disable-auto-update", false, "禁用自动升级")
-	flag.BoolVar(&agentCliParam.DisableForceUpdate, "disable-force-update", false, "禁用强制升级")
 	flag.BoolVar(&agentCliParam.TLS, "tls", false, "启用SSL/TLS加密")
 	flag.BoolVarP(&agentCliParam.Version, "version", "v", false, "查看当前版本号")
 	flag.StringVar(&pseudoParam.PseudoPlatform, "pseudo-platform", "", "修改系统名")

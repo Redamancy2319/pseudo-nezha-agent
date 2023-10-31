@@ -99,7 +99,7 @@ func GetHost(agentConfig *model.AgentConfig, pseudoHost *model.PseudoParam) *mod
 				ret.CPU = append(ret.CPU, fmt.Sprintf("%s %d %s Core", pseudomodel, pseudocount, cpuType))
 			}
 		default:
-			println("pseudoHost.PseudoCPUModel and pseudoHost.PseudoCPUCoreCount error:", "Mismatch number")
+			println("PseudoCPUModel and PseudoCPUCoreCount error:", "Inconsistent quantity")
 		}
 
 	}
