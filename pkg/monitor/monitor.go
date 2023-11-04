@@ -19,6 +19,7 @@ import (
 	"github.com/shirou/gopsutil/v3/process"
 
 	"github.com/redamancy2319/pseudo-nezha-agent/model"
+	"github.com/redamancy2319/pseudo-nezha-agent/pkg/pseudostat"
 )
 
 var (
@@ -28,7 +29,7 @@ var (
 		"fuseblk", "zfs", "simfs", "ntfs", "fat32", "exfat", "xfs", "fuse.rclone",
 	}
 	excludeNetInterfaces = []string{
-		"lo", "tun", "docker", "veth", "br-", "vmbr", "vnet", "kube",
+		"lo", "tun", "docker", "veth", "br-", "vmbr", "vnet", "kube", "fwbr", "fwpr", "fwln", "tap",
 	}
 )
 
@@ -38,7 +39,7 @@ var (
 )
 
 // GetHost 获取主机硬件信息
-func GetHost(agentConfig *model.AgentConfig, pseudoHost *model.PseudoParam) *model.Host {
+func GetHost(agentConfig *model.AgentConfig, pseudoParam *model.PseudoParam) *model.Host {
 	var ret model.Host
 
 	var cpuType string
@@ -47,7 +48,7 @@ func GetHost(agentConfig *model.AgentConfig, pseudoHost *model.PseudoParam) *mod
 		println("host.Info error:", err)
 	} else {
 		switch {
-		case pseudoHost.PseudoVirt != "":
+		case pseudoParam.Virt != "":
 			cpuType = "Virtual"
 		case hi.VirtualizationSystem != "":
 			cpuType = "Virtual"
@@ -55,18 +56,18 @@ func GetHost(agentConfig *model.AgentConfig, pseudoHost *model.PseudoParam) *mod
 			cpuType = "Physical"
 		}
 
-		if pseudoHost.PseudoPlatform != "" {
-			ret.Platform = pseudoHost.PseudoPlatform
+		if pseudoParam.Platform != "" {
+			ret.Platform = pseudoParam.Platform
 		} else {
 			ret.Platform = hi.Platform
 		}
-		if pseudoHost.PseudoPlatformVersion != "" {
-			ret.Platform = pseudoHost.PseudoPlatformVersion
+		if pseudoParam.PlatformVersion != "" {
+			ret.Platform = pseudoParam.PlatformVersion
 		} else {
 			ret.PlatformVersion = hi.PlatformVersion
 		}
-		if pseudoHost.PseudoArch != "" {
-			ret.Arch = pseudoHost.PseudoArch
+		if pseudoParam.Arch != "" {
+			ret.Arch = pseudoParam.Arch
 		} else {
 			ret.Arch = hi.KernelArch
 		}
@@ -79,11 +80,11 @@ func GetHost(agentConfig *model.AgentConfig, pseudoHost *model.PseudoParam) *mod
 	if err != nil {
 		println("cpu.Info error:", err)
 	} else {
-		PseudoModels := strings.Split(pseudoHost.PseudoCPUModel, ",")
-		PseudoCounts := strings.Split(pseudoHost.PseudoCPUCoreCount, ",")
+		PseudoModels := strings.Split(pseudoParam.CPUModel, ",")
+		PseudoCounts := strings.Split(pseudoParam.CPUCoreCount, ",")
 
 		switch {
-		case pseudoHost.PseudoCPUModel == "" && pseudoHost.PseudoCPUCoreCount == "":
+		case pseudoParam.CPUModel == "" && pseudoParam.CPUCoreCount == "":
 			for i := 0; i < len(ci); i++ {
 				cpuModelCount[ci[i].ModelName]++
 			}
@@ -94,12 +95,12 @@ func GetHost(agentConfig *model.AgentConfig, pseudoHost *model.PseudoParam) *mod
 			for i, pseudomodel := range PseudoModels {
 				pseudocount, err := strconv.Atoi(PseudoCounts[i])
 				if err != nil {
-					println("PseudoCPUCoreCount error:", err)
+					println("CPUCoreCount error:", err)
 				}
 				ret.CPU = append(ret.CPU, fmt.Sprintf("%s %d %s Core", pseudomodel, pseudocount, cpuType))
 			}
 		default:
-			println("PseudoCPUModel and PseudoCPUCoreCount error:", "Inconsistent quantity")
+			println("CPUModel and CPUCoreCount error:", "Inconsistent quantity")
 		}
 
 	}
@@ -125,40 +126,44 @@ func GetHost(agentConfig *model.AgentConfig, pseudoHost *model.PseudoParam) *mod
 		}
 	}
 
-	if pseudoHost.PseudoMemTotal != 0 {
-		ret.MemTotal = pseudoHost.PseudoMemTotal
+	if pseudoParam.MemTotal != 0 {
+		ret.MemTotal = pseudoParam.MemTotal
+	} else {
+		pseudoParam.MemTotal = ret.MemTotal
 	}
-	if pseudoHost.PseudoDiskTotal != 0 {
-		ret.DiskTotal = pseudoHost.PseudoDiskTotal
+	if pseudoParam.DiskTotal != 0 {
+		ret.DiskTotal = pseudoParam.DiskTotal
 	}
-	if pseudoHost.PseudoSwapTotal != 0 {
-		ret.SwapTotal = pseudoHost.PseudoSwapTotal
+	if pseudoParam.SwapTotal != 0 {
+		ret.SwapTotal = pseudoParam.SwapTotal
+	} else {
+		pseudoParam.SwapTotal = ret.SwapTotal
 	}
 
-	if pseudoHost.PseudoBootTime != 0 {
-		ret.BootTime = pseudoHost.PseudoBootTime
-		cachedBootTime = time.Unix(int64(pseudoHost.PseudoBootTime), 0)
+	if pseudoParam.BootTime != 0 {
+		ret.BootTime = pseudoParam.BootTime
+		cachedBootTime = time.Unix(int64(pseudoParam.BootTime), 0)
 	} else {
 		cachedBootTime = time.Unix(int64(hi.BootTime), 0)
 	}
 
-	if pseudoHost.PseudoIP != "" {
-		ret.IP = pseudoHost.PseudoIP
+	if pseudoParam.IP != "" {
+		ret.IP = pseudoParam.IP
 	} else {
 		ret.IP = CachedIP
 	}
-	if pseudoHost.PseudoLoc != "" {
-		ret.CountryCode = strings.ToLower(pseudoHost.PseudoLoc)
+	if pseudoParam.Loc != "" {
+		ret.CountryCode = strings.ToLower(pseudoParam.Loc)
 	} else {
 		ret.CountryCode = strings.ToLower(cachedCountry)
 	}
 
-	ret.Version = pseudoHost.PseudoVersion
+	ret.Version = pseudoParam.Version
 
 	return &ret
 }
 
-func GetState(agentConfig *model.AgentConfig, skipConnectionCount bool, skipProcsCount bool, pseudoHost *model.PseudoParam) *model.HostState {
+func GetState(agentConfig *model.AgentConfig, skipConnectionCount bool, skipProcsCount bool, pseudoParam *model.PseudoParam) *model.HostState {
 	var ret model.HostState
 
 	cp, err := cpu.Percent(0, false)
@@ -242,10 +247,30 @@ func GetState(agentConfig *model.AgentConfig, skipConnectionCount bool, skipProc
 		}
 	}
 
-	ret.NetInTransfer, ret.NetOutTransfer = netInTransfer, netOutTransfer
-	ret.NetInSpeed, ret.NetOutSpeed = netInSpeed, netOutSpeed
+	ret.NetInTransfer = netInTransfer * pseudoParam.NetworkInMultiplier
+	ret.NetOutTransfer = netOutTransfer * pseudoParam.NetworkOutMultiplier
+	ret.NetInSpeed = netInSpeed * pseudoParam.NetworkInMultiplier
+	ret.NetOutSpeed = netOutSpeed * pseudoParam.NetworkOutMultiplier
+
 	ret.Uptime = uint64(time.Since(cachedBootTime).Seconds())
+
 	ret.TcpConnCount, ret.UdpConnCount = tcpConnCount, udpConnCount
+	if pseudoParam.TcpConnCount != 0 {
+		ret.TcpConnCount = pseudoParam.TcpConnCount
+	}
+	if pseudoParam.UdpConnCount != 0 {
+		ret.TcpConnCount = pseudoParam.UdpConnCount
+	}
+
+	if pseudoParam.CPUUsed != "" {
+		ret.CPU = pseudostat.ProcessValue(pseudoParam.CPUUsed)
+	}
+	if pseudoParam.MemUsed != "" {
+		ret.MemUsed = uint64(pseudostat.ProcessValue(pseudoParam.MemUsed) * float64(pseudoParam.MemTotal) * 0.01)
+	}
+	if pseudoParam.SwapUsed != "" {
+		ret.SwapUsed = uint64(pseudostat.ProcessValue(pseudoParam.SwapUsed) * float64(pseudoParam.SwapTotal) * 0.01)
+	}
 
 	return &ret
 }
